@@ -1,4 +1,4 @@
-# modules/card.py
+# modules/carrd.py
 
 from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
