@@ -18,7 +18,7 @@ class LookupType(Enum):
 
 @dataclass
 class LookupRunner:
-    discord_token: str = None
+    discord_token: Optional[str] = None
     discord_client: DiscordClient = field(init=False)
 
     def __post_init__(self):
