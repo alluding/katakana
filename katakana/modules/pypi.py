@@ -1,10 +1,12 @@
-# modules/pypi.py
+from __future__ import annotations
+from typing import Optional, List, Dict, TYPE_CHECKING
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict
 from katakana.http import SessionManager
 from bs4 import BeautifulSoup
 import re
+
+if TYPE_CHECKING:
+    from katakana.http import Session
 
 @dataclass
 class GitHubRepoInfo:
@@ -17,8 +19,8 @@ class GitHubRepoInfo:
     language: Optional[str]
 
     @classmethod
-    def from_github_api(cls, repo_owner: str, repo_name: str) -> 'GitHubRepoInfo':
-        session = SessionManager.get_session()
+    def from_github_api(cls, repo_owner: str, repo_name: str) -> GitHubRepoInfo:
+        session: Session = SessionManager.get_session()
         url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
         response = session.get(url)
         data = response.json()
@@ -48,8 +50,8 @@ class PyPIPackageInfo:
         return None
 
     @classmethod
-    def from_pypi(cls, package_name: str) -> 'PyPIPackageInfo':
-        session = SessionManager.get_session()
+    def from_pypi(cls, package_name: str) -> PyPIPackageInfo:
+        session: Session = SessionManager.get_session()
         url = f"https://pypi.org/pypi/{package_name}/json"
         response = session.get(url)
         if response.status_code != 200:
@@ -58,13 +60,7 @@ class PyPIPackageInfo:
         data = response.json()
         version = data['info']['version']
         release_date = data['releases'][version][0]['upload_time'] if version in data['releases'] else None
-        github_info = None
-
-        project_urls = data['info'].get('project_urls', {})
-        for url in project_urls.values():
-            github_info = cls.extract_github_repo(url)
-            if github_info:
-                break
+        github_info = next((cls.extract_github_repo(url) for url in data['info'].get('project_urls', {}).values()), None)
 
         return cls(name=package_name, version=version, release_date=release_date, github_info=github_info)
 
@@ -93,8 +89,8 @@ class PyPIUserInfo:
         return joined_element['datetime'] if joined_element else None
 
     @classmethod
-    def from_username(cls, username: str) -> 'PyPIUserInfo':
-        session = SessionManager.get_session()
+    def from_username(cls, username: str) -> PyPIUserInfo:
+        session: Session = SessionManager.get_session()
         url = f"https://pypi.org/user/{username}/"
         response = session.get(url)
         if response.status_code != 200:
@@ -119,14 +115,11 @@ class PyPIUserInfo:
 
     @staticmethod
     def _parse_package_elements(soup: BeautifulSoup) -> List[Dict[str, str]]:
-        packages = []
-        for package_element in soup.find_all('a', {'class': 'package-snippet'}):
-            name = package_element.find('h3', {'class': 'package-snippet__title'}).get_text(strip=True)
-            released = package_element.find('time', {'data-controller': 'localized-time'}).get_text(strip=True)
-            description = package_element.find('p', {'class': 'package-snippet__description'}).get_text(strip=True).strip()
-            packages.append({
-                'name': name,
-                'released': released,
-                'desc': description
-            })
-        return packages
+        return [
+            {
+                'name': package_element.find('h3', {'class': 'package-snippet__title'}).get_text(strip=True),
+                'released': package_element.find('time', {'data-controller': 'localized-time'}).get_text(strip=True),
+                'desc': package_element.find('p', {'class': 'package-snippet__description'}).get_text(strip=True).strip(),
+            }
+            for package_element in soup.find_all('a', {'class': 'package-snippet'})
+        ]
